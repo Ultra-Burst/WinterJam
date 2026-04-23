@@ -42,7 +42,13 @@ public class PersonStats
 
     int GetRandomEnumValue<T>(T enumType) where T : System.Enum
     {
-        // not sure if +1 is needed but probably
-        return UnityEngine.Random.Range(0, Enum.GetValues(typeof(T)).Cast<int>().Max()+1);
+        // Adjusted for this project because several enums are still empty during prototyping,
+        // and the old Max()-based selection was throwing runtime exceptions when people spawned.
+        Array values = Enum.GetValues(typeof(T));
+        if (values == null || values.Length == 0)
+            return 0;
+
+        int randomIndex = UnityEngine.Random.Range(0, values.Length);
+        return Convert.ToInt32(values.GetValue(randomIndex));
     }
 }
