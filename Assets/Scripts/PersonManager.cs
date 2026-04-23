@@ -10,7 +10,7 @@ public class PersonManager : MonoBehaviour
 
     private void Start()
     {
-        CreatePeople(startingPeopleAmount);
+        //CreatePeople(startingPeopleAmount);
     }
 
     void CreatePeople(int num)
