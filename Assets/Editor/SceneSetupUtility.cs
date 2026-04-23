@@ -3,6 +3,7 @@ using UnityEditor.Events;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using TMPro;
 using Fungus;
@@ -12,6 +13,8 @@ public static class SceneSetupUtility
     private const string HomeScenePath = "Assets/Scenes/StartScene.unity";
     private const string GameScenePath = "Assets/Scenes/MainScene.unity";
     private const string TestScenePath = "Assets/Scenes/TEST.unity";
+    private const string WinScenePath = "Assets/Scenes/YouWinScene.unity";
+    private const string LoseScenePath = "Assets/Scenes/YouLoseScene.unity";
     private const string FlowchartPrefabPath = "Assets/Fungus/Resources/Prefabs/Flowchart.prefab";
     private const string SayDialogPrefabPath = "Assets/Fungus/Resources/Prefabs/SayDialog.prefab";
     private const string MenuDialogPrefabPath = "Assets/Fungus/Resources/Prefabs/MenuDialog.prefab";
@@ -21,18 +24,43 @@ public static class SceneSetupUtility
     public static void SetupMainMenuAndPause()
     {
         SetupHomeScene();
-        SetupGameScene();
-        SetupBuildSettings();
+        SetupGameScene(true);
+        SetupResultScenes();
+        SetupBuildSettings(true);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
-        EditorUtility.DisplayDialog("WinterJam", "Main menu and pause menu setup complete.", "OK");
+        EditorUtility.DisplayDialog("WinterJam", "Main menu, pause menu, result scenes, and Fungus setup complete.", "OK");
+    }
+
+    [MenuItem("Tools/WinterJam/Setup Menus Without Fungus")]
+    public static void SetupMenusWithoutFungus()
+    {
+        SetupHomeScene();
+        SetupGameScene(false);
+        SetupResultScenes();
+        SetupBuildSettings(false);
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        EditorUtility.DisplayDialog("WinterJam", "Main menu, pause menu, and result scenes setup complete without Fungus.", "OK");
     }
 
     public static void SetupMainMenuAndPauseBatch()
     {
         SetupHomeScene();
-        SetupGameScene();
-        SetupBuildSettings();
+        SetupGameScene(true);
+        SetupResultScenes();
+        SetupBuildSettings(true);
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        EditorApplication.Exit(0);
+    }
+
+    public static void SetupMenusWithoutFungusBatch()
+    {
+        SetupHomeScene();
+        SetupGameScene(false);
+        SetupResultScenes();
+        SetupBuildSettings(false);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         EditorApplication.Exit(0);
@@ -42,7 +70,8 @@ public static class SceneSetupUtility
     public static void SetupFungusTestSceneMenu()
     {
         SetupFungusTestScene();
-        SetupBuildSettings();
+        SetupResultScenes();
+        SetupBuildSettings(true);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         EditorUtility.DisplayDialog("WinterJam", "Fungus test scene setup complete.", "OK");
@@ -51,7 +80,8 @@ public static class SceneSetupUtility
     public static void SetupFungusTestSceneBatch()
     {
         SetupFungusTestScene();
-        SetupBuildSettings();
+        SetupResultScenes();
+        SetupBuildSettings(true);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         EditorApplication.Exit(0);
@@ -59,7 +89,9 @@ public static class SceneSetupUtility
 
     private static void SetupHomeScene()
     {
-        var scene = EditorSceneManager.OpenScene(HomeScenePath, OpenSceneMode.Single);
+        Scene scene = OpenOrCreateScene(HomeScenePath);
+        RemoveRootObjectIfPresent("Result Canvas");
+        RemoveRootObjectIfPresent("Gameplay Canvas");
 
         EnsureMainCamera();
         EventSystem eventSystem = EnsureEventSystem();
@@ -89,8 +121,8 @@ public static class SceneSetupUtility
         layout.padding = new RectOffset(48, 48, 48, 48);
 
         AddLayoutSpace(contentRoot, 24f);
-        CreateText("Title", contentRoot, "Winter Jam", 58, FontStyles.Bold, TextAlignmentOptions.Center, Color.white, 80f);
-        CreateText("Subtitle", contentRoot, "Horror Dating", 24, FontStyles.Normal, TextAlignmentOptions.Center, new Color(0.78f, 0.82f, 0.9f, 1f), 36f);
+        CreateText("Title", contentRoot, "Title", 58, FontStyles.Bold, TextAlignmentOptions.Center, Color.white, 80f);
+        CreateText("Subtitle", contentRoot, "Sub Title", 24, FontStyles.Normal, TextAlignmentOptions.Center, new Color(0.78f, 0.82f, 0.9f, 1f), 36f);
         AddLayoutSpace(contentRoot, 14f);
 
         GameObject controllerObject = GetOrCreateRootObject("MainMenuController");
@@ -108,7 +140,7 @@ public static class SceneSetupUtility
         ConfigureSelectableNavigation(contentRoot);
 
         UICanvasSelectionFrame selectionFrame = EnsureSelectionFrame(canvas.transform, canvas);
-        ConfigureSelectionFrame(selectionFrame, canvas, contentRoot);
+        ConfigureMenuSelectionFrame(selectionFrame, canvas, contentRoot);
         ConfigureNavigationController(navigationController, startButton, contentRoot);
 
         eventSystem.SetSelectedGameObject(startButton.gameObject);
@@ -116,9 +148,9 @@ public static class SceneSetupUtility
         EditorSceneManager.SaveScene(scene);
     }
 
-    private static void SetupGameScene()
+    private static void SetupGameScene(bool includeFungus)
     {
-        var scene = EditorSceneManager.OpenScene(GameScenePath, OpenSceneMode.Single);
+        Scene scene = OpenOrCreateScene(GameScenePath);
 
         EnsureMainCamera();
         EventSystem eventSystem = EnsureEventSystem();
@@ -126,7 +158,10 @@ public static class SceneSetupUtility
         Canvas canvas = GetOrCreateCanvas("Gameplay Canvas", 10);
         RectTransform canvasRect = canvas.GetComponent<RectTransform>();
         CreateOrUpdateHudLabel(canvasRect);
-        SetupFungusPrefabs();
+        if (includeFungus)
+            SetupFungusPrefabs();
+        else
+            RemoveFungusObjects();
 
         GameObject menuControllerObject = GetOrCreateRootObject("SceneMenuController");
         MainMenuController menuController = GetOrAddComponent<MainMenuController>(menuControllerObject);
@@ -155,11 +190,79 @@ public static class SceneSetupUtility
         UnityEventTools.AddPersistentListener(restartButton.onClick, menuController.RestartCurrentScene);
 
         ConfigureSelectableNavigation(pausePanel.Find("Buttons") as RectTransform);
-        ConfigureSelectionFrame(selectionFrame, canvas, pausePanel.Find("Buttons"));
+        ConfigureGameplaySelectionFrame(selectionFrame, canvas, pausePanel.Find("Buttons"));
         ConfigureNavigationController(navigationController, resumeButton, pausePanel.Find("Buttons"));
 
         pausePanel.gameObject.SetActive(false);
         eventSystem.SetSelectedGameObject(null);
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+    }
+
+    private static void SetupResultScenes()
+    {
+        SetupResultScene(WinScenePath, "You Win", "The date survived the night.");
+        SetupResultScene(LoseScenePath, "You Lose", "The night ends here.");
+    }
+
+    private static void SetupResultScene(string scenePath, string title, string subtitle)
+    {
+        Scene scene = OpenOrCreateScene(scenePath);
+        RemoveRootObjectIfPresent("Home Canvas");
+        RemoveRootObjectIfPresent("Gameplay Canvas");
+
+        EnsureMainCamera();
+        EventSystem eventSystem = EnsureEventSystem();
+        ConfigureEventSystem(eventSystem);
+        Canvas canvas = GetOrCreateCanvas("Result Canvas", 0);
+        RectTransform canvasRect = canvas.GetComponent<RectTransform>();
+        ClearChildren(canvasRect);
+
+        CreateFullscreenImage("Background", canvasRect, new Color(0.1f, 0.12f, 0.17f, 1f));
+
+        RectTransform contentRoot = CreateUIObject("Content", canvasRect).GetComponent<RectTransform>();
+        contentRoot.anchorMin = new Vector2(0.5f, 0.5f);
+        contentRoot.anchorMax = new Vector2(0.5f, 0.5f);
+        contentRoot.pivot = new Vector2(0.5f, 0.5f);
+        contentRoot.sizeDelta = new Vector2(720f, 540f);
+        contentRoot.anchoredPosition = Vector2.zero;
+
+        VerticalLayoutGroup layout = contentRoot.gameObject.AddComponent<VerticalLayoutGroup>();
+        layout.childAlignment = TextAnchor.MiddleCenter;
+        layout.spacing = 18f;
+        layout.childControlWidth = true;
+        layout.childControlHeight = false;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+        layout.padding = new RectOffset(48, 48, 48, 48);
+
+        AddLayoutSpace(contentRoot, 24f);
+        CreateText("Title", contentRoot, title, 58, FontStyles.Bold, TextAlignmentOptions.Center, Color.white, 80f);
+        CreateText("Subtitle", contentRoot, subtitle, 24, FontStyles.Normal, TextAlignmentOptions.Center, new Color(0.78f, 0.82f, 0.9f, 1f), 36f);
+        AddLayoutSpace(contentRoot, 14f);
+
+        GameObject controllerObject = GetOrCreateRootObject("ResultMenuController");
+        MainMenuController menuController = GetOrAddComponent<MainMenuController>(controllerObject);
+
+        Button restartButton = CreateButton("Restart", contentRoot, new Color(0.82f, 0.49f, 0.19f, 1f));
+        Button mainMenuButton = CreateButton("Main Menu", contentRoot, new Color(0.25f, 0.54f, 0.73f, 1f));
+        Button quitButton = CreateButton("Quit", contentRoot, new Color(0.29f, 0.33f, 0.39f, 1f));
+
+        restartButton.onClick.RemoveAllListeners();
+        mainMenuButton.onClick.RemoveAllListeners();
+        quitButton.onClick.RemoveAllListeners();
+        UnityEventTools.AddPersistentListener(restartButton.onClick, menuController.LoadGameScene);
+        UnityEventTools.AddPersistentListener(mainMenuButton.onClick, menuController.LoadHomeScene);
+        UnityEventTools.AddPersistentListener(quitButton.onClick, menuController.QuitGame);
+
+        ControllerUINavigationController navigationController = GetOrAddComponent<ControllerUINavigationController>(canvas.gameObject);
+        ConfigureSelectableNavigation(contentRoot);
+
+        UICanvasSelectionFrame selectionFrame = EnsureSelectionFrame(canvas.transform, canvas);
+        ConfigureMenuSelectionFrame(selectionFrame, canvas, contentRoot);
+        ConfigureNavigationController(navigationController, restartButton, contentRoot);
+
+        eventSystem.SetSelectedGameObject(restartButton.gameObject);
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
     }
@@ -234,6 +337,20 @@ public static class SceneSetupUtility
         ConfigureFungusUi();
     }
 
+    private static void RemoveFungusObjects()
+    {
+        RemoveRootObjectIfPresent("Flowchart");
+        RemoveRootObjectIfPresent("SayDialog");
+        RemoveRootObjectIfPresent("MenuDialog");
+    }
+
+    private static void RemoveRootObjectIfPresent(string rootName)
+    {
+        GameObject existing = GameObject.Find(rootName);
+        if (existing != null)
+            Object.DestroyImmediate(existing);
+    }
+
     private static void InstantiatePrefabIfMissing(string prefabPath, string rootName)
     {
         if (GameObject.Find(rootName) != null)
@@ -251,14 +368,39 @@ public static class SceneSetupUtility
         Undo.RegisterCreatedObjectUndo(instance, "Instantiate " + rootName);
     }
 
-    private static void SetupBuildSettings()
+    private static void SetupBuildSettings(bool includeFungusTestScene)
     {
+        if (includeFungusTestScene)
+        {
+            EditorBuildSettings.scenes = new[]
+            {
+                new EditorBuildSettingsScene(HomeScenePath, true),
+                new EditorBuildSettingsScene(GameScenePath, true),
+                new EditorBuildSettingsScene(WinScenePath, true),
+                new EditorBuildSettingsScene(LoseScenePath, true),
+                new EditorBuildSettingsScene(TestScenePath, true)
+            };
+            return;
+        }
+
         EditorBuildSettings.scenes = new[]
         {
             new EditorBuildSettingsScene(HomeScenePath, true),
             new EditorBuildSettingsScene(GameScenePath, true),
-            new EditorBuildSettingsScene(TestScenePath, true)
+            new EditorBuildSettingsScene(WinScenePath, true),
+            new EditorBuildSettingsScene(LoseScenePath, true)
         };
+    }
+
+    private static Scene OpenOrCreateScene(string scenePath)
+    {
+        SceneAsset sceneAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(scenePath);
+        if (sceneAsset != null)
+            return EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+
+        Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        EditorSceneManager.SaveScene(scene, scenePath);
+        return scene;
     }
 
     private static void EnsureMainCamera()
@@ -412,7 +554,17 @@ public static class SceneSetupUtility
         return panel;
     }
 
-    private static void ConfigureSelectionFrame(UICanvasSelectionFrame selectionFrame, Canvas canvas, Transform navigationRoot)
+    private static void ConfigureMenuSelectionFrame(UICanvasSelectionFrame selectionFrame, Canvas canvas, Transform navigationRoot)
+    {
+        ConfigureSelectionFrame(selectionFrame, canvas, navigationRoot, new Vector2(1f, 1f));
+    }
+
+    private static void ConfigureGameplaySelectionFrame(UICanvasSelectionFrame selectionFrame, Canvas canvas, Transform navigationRoot)
+    {
+        ConfigureSelectionFrame(selectionFrame, canvas, navigationRoot, new Vector2(1.35f, 1f));
+    }
+
+    private static void ConfigureSelectionFrame(UICanvasSelectionFrame selectionFrame, Canvas canvas, Transform navigationRoot, Vector2 sizeMultiplier)
     {
         RectTransform frameRect = selectionFrame.transform as RectTransform;
         if (frameRect != null)
@@ -430,7 +582,7 @@ public static class SceneSetupUtility
         selectionFrameObject.FindProperty("useSceneWideFallbackNavigation").boolValue = false;
         selectionFrameObject.FindProperty("frameColor").colorValue = new Color(0.88f, 0.62f, 0.18f, 1f);
         selectionFrameObject.FindProperty("offset").vector2Value = new Vector2(0.52f, 0f);
-        selectionFrameObject.FindProperty("sizeMultiplier").vector2Value = new Vector2(1.35f, 1f);
+        selectionFrameObject.FindProperty("sizeMultiplier").vector2Value = sizeMultiplier;
         selectionFrameObject.FindProperty("padding").vector2Value = new Vector2(15.8f, 14.5f);
         selectionFrameObject.FindProperty("clampSizeToRoot").boolValue = true;
         selectionFrameObject.FindProperty("clampRootPadding").vector2Value = new Vector2(-14.16f, 4f);

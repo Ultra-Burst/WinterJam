@@ -8,6 +8,8 @@ public class MainMenuController : MonoBehaviour
 {
     [SerializeField] private string gameSceneName = "MainScene";
     [SerializeField] private string homeSceneName = "StartScene";
+    [SerializeField] private string winSceneName = "YouWinScene";
+    [SerializeField] private string loseSceneName = "YouLoseScene";
 
     public void StartGame()
     {
@@ -22,6 +24,16 @@ public class MainMenuController : MonoBehaviour
     public void LoadHomeScene()
     {
         SceneManager.LoadScene(homeSceneName);
+    }
+
+    public void LoadWinScene()
+    {
+        SceneManager.LoadScene(winSceneName);
+    }
+
+    public void LoadLoseScene()
+    {
+        SceneManager.LoadScene(loseSceneName);
     }
 
     public void RestartCurrentScene()
