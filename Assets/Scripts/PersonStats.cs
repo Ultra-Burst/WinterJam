@@ -7,20 +7,20 @@ using UnityEngine;
 public class PersonStats
 {
     // TODO: Clearer variable names and cover rest of the data
-    string Name { get; }
-    int Age { get; }
-    Food FavFood { get; }
-    Food LastEatenFood { get; }
-    Hobby Hobby { get; }
-    Job CurrentJob { get; }
-    Job DreamJob { get; }
-    Education Education { get; }
-    Origin Origin { get; }
-    Creature Creature { get; }
-    FamilyRelation FamilyRelation { get; }
-    Activity TodayActivity { get; }
-    Activity YesterdayActivity { get; }
-    LivingWith LivingWith { get; }
+    public string Name { get; }
+    public int Age { get; }
+    public Food FavFood { get; }
+    public Food LastEatenFood { get; }
+    public Hobby Hobby { get; }
+    public Job CurrentJob { get; }
+    public Job DreamJob { get; }
+    public Education Education { get; }
+    public Origin Origin { get; }
+    public Creature Creature { get; }
+    public FamilyRelation FamilyRelation { get; }
+    public Activity TodayActivity { get; }
+    public Activity YesterdayActivity { get; }
+    public LivingWith LivingWith { get; }
 
     public PersonStats(int ageMin, int ageMax, string name)
     {

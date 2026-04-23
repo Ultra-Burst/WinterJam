@@ -6,7 +6,7 @@ using UnityEngine;
 public class Profile : MonoBehaviour
 {
     PersonStats Stats;
-    public void CreateProfile(bool isDoppel, PersonStats stats)
+    public void CreateProfile(bool isDoppel, PersonStats stats, int numAlteredStats)
     {
         Stats = stats;
         int num;
