@@ -18,7 +18,7 @@ public class Person : MonoBehaviour
     private void Start()
     {
         // create on some ui object
-        //MyProfile.CreateProfile(false, Name, Stats);
+        //MyProfile.CreateProfile(false, Stats);
     }
 
 
