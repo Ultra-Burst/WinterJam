@@ -3,6 +3,7 @@ using UnityEditor.Events;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using TMPro;
 using Fungus;
@@ -12,27 +13,58 @@ public static class SceneSetupUtility
     private const string HomeScenePath = "Assets/Scenes/StartScene.unity";
     private const string GameScenePath = "Assets/Scenes/MainScene.unity";
     private const string TestScenePath = "Assets/Scenes/TEST.unity";
+    private const string WinScenePath = "Assets/Scenes/YouWinScene.unity";
+    private const string LoseScenePath = "Assets/Scenes/YouLoseScene.unity";
+    private const string PersonPrefabPath = "Assets/Prefabs/Person.prefab";
     private const string FlowchartPrefabPath = "Assets/Fungus/Resources/Prefabs/Flowchart.prefab";
     private const string SayDialogPrefabPath = "Assets/Fungus/Resources/Prefabs/SayDialog.prefab";
     private const string MenuDialogPrefabPath = "Assets/Fungus/Resources/Prefabs/MenuDialog.prefab";
     private const string DefaultTmpFontResourcePath = "Fonts & Materials/LiberationSans SDF";
+    private const string DemoPortraitPathA = "Assets/FungusExamples/Sherlock/Portraits/John/neutral.png";
+    private const string DemoPortraitPathB = "Assets/FungusExamples/Sherlock/Portraits/Sherlock/happy.png";
+    private const string DemoPortraitPathC = "Assets/FungusExamples/Sherlock/Portraits/John/worried.png";
 
     [MenuItem("Tools/WinterJam/Setup Main Menu And Pause")]
     public static void SetupMainMenuAndPause()
     {
         SetupHomeScene();
-        SetupGameScene();
-        SetupBuildSettings();
+        SetupGameScene(true);
+        SetupResultScenes();
+        SetupBuildSettings(true);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
-        EditorUtility.DisplayDialog("WinterJam", "Main menu and pause menu setup complete.", "OK");
+        EditorUtility.DisplayDialog("WinterJam", "Main menu, pause menu, result scenes, and Fungus setup complete.", "OK");
+    }
+
+    [MenuItem("Tools/WinterJam/Setup Menus Without Fungus")]
+    public static void SetupMenusWithoutFungus()
+    {
+        SetupHomeScene();
+        SetupGameScene(false);
+        SetupResultScenes();
+        SetupBuildSettings(false);
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        EditorUtility.DisplayDialog("WinterJam", "Main menu, pause menu, and result scenes setup complete without Fungus.", "OK");
     }
 
     public static void SetupMainMenuAndPauseBatch()
     {
         SetupHomeScene();
-        SetupGameScene();
-        SetupBuildSettings();
+        SetupGameScene(true);
+        SetupResultScenes();
+        SetupBuildSettings(true);
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        EditorApplication.Exit(0);
+    }
+
+    public static void SetupMenusWithoutFungusBatch()
+    {
+        SetupHomeScene();
+        SetupGameScene(false);
+        SetupResultScenes();
+        SetupBuildSettings(false);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         EditorApplication.Exit(0);
@@ -42,7 +74,8 @@ public static class SceneSetupUtility
     public static void SetupFungusTestSceneMenu()
     {
         SetupFungusTestScene();
-        SetupBuildSettings();
+        SetupResultScenes();
+        SetupBuildSettings(true);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         EditorUtility.DisplayDialog("WinterJam", "Fungus test scene setup complete.", "OK");
@@ -51,7 +84,8 @@ public static class SceneSetupUtility
     public static void SetupFungusTestSceneBatch()
     {
         SetupFungusTestScene();
-        SetupBuildSettings();
+        SetupResultScenes();
+        SetupBuildSettings(true);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         EditorApplication.Exit(0);
@@ -59,13 +93,14 @@ public static class SceneSetupUtility
 
     private static void SetupHomeScene()
     {
-        var scene = EditorSceneManager.OpenScene(HomeScenePath, OpenSceneMode.Single);
+        Scene scene = OpenOrCreateScene(HomeScenePath);
+        RemoveRootObjectIfPresent("Result Canvas");
+        RemoveRootObjectIfPresent("Gameplay Canvas");
 
         EnsureMainCamera();
         EventSystem eventSystem = EnsureEventSystem();
         ConfigureEventSystem(eventSystem);
         Canvas canvas = GetOrCreateCanvas("Home Canvas", 0);
-        Font font = Resources.GetBuiltinResource<Font>("Arial.ttf");
 
         RectTransform canvasRect = canvas.GetComponent<RectTransform>();
         ClearChildren(canvasRect);
@@ -89,8 +124,8 @@ public static class SceneSetupUtility
         layout.padding = new RectOffset(48, 48, 48, 48);
 
         AddLayoutSpace(contentRoot, 24f);
-        CreateText("Title", contentRoot, "Winter Jam", 58, FontStyles.Bold, TextAlignmentOptions.Center, Color.white, 80f);
-        CreateText("Subtitle", contentRoot, "Horror Dating", 24, FontStyles.Normal, TextAlignmentOptions.Center, new Color(0.78f, 0.82f, 0.9f, 1f), 36f);
+        CreateText("Title", contentRoot, "Title", 58, FontStyles.Bold, TextAlignmentOptions.Center, Color.white, 80f);
+        CreateText("Subtitle", contentRoot, "Sub Title", 24, FontStyles.Normal, TextAlignmentOptions.Center, new Color(0.78f, 0.82f, 0.9f, 1f), 36f);
         AddLayoutSpace(contentRoot, 14f);
 
         GameObject controllerObject = GetOrCreateRootObject("MainMenuController");
@@ -108,7 +143,7 @@ public static class SceneSetupUtility
         ConfigureSelectableNavigation(contentRoot);
 
         UICanvasSelectionFrame selectionFrame = EnsureSelectionFrame(canvas.transform, canvas);
-        ConfigureSelectionFrame(selectionFrame, canvas, contentRoot);
+        ConfigureMenuSelectionFrame(selectionFrame, canvas, contentRoot);
         ConfigureNavigationController(navigationController, startButton, contentRoot);
 
         eventSystem.SetSelectedGameObject(startButton.gameObject);
@@ -116,9 +151,9 @@ public static class SceneSetupUtility
         EditorSceneManager.SaveScene(scene);
     }
 
-    private static void SetupGameScene()
+    private static void SetupGameScene(bool includeFungus)
     {
-        var scene = EditorSceneManager.OpenScene(GameScenePath, OpenSceneMode.Single);
+        Scene scene = OpenOrCreateScene(GameScenePath);
 
         EnsureMainCamera();
         EventSystem eventSystem = EnsureEventSystem();
@@ -126,19 +161,26 @@ public static class SceneSetupUtility
         Canvas canvas = GetOrCreateCanvas("Gameplay Canvas", 10);
         RectTransform canvasRect = canvas.GetComponent<RectTransform>();
         CreateOrUpdateHudLabel(canvasRect);
-        SetupFungusPrefabs();
+
+        if (includeFungus)
+            SetupFungusPrefabs();
+        else
+            RemoveFungusObjects();
 
         GameObject menuControllerObject = GetOrCreateRootObject("SceneMenuController");
         MainMenuController menuController = GetOrAddComponent<MainMenuController>(menuControllerObject);
 
+        RectTransform selectionPanel = GetOrCreatePersonSelectionPanel(canvasRect);
         RectTransform pausePanel = GetOrCreatePausePanel(canvasRect, menuController);
+        Transform pauseButtonRoot = pausePanel.Find("Buttons");
+        Transform selectionCardList = selectionPanel.Find("Frame/Card List");
         Button resumeButton = pausePanel.Find("Buttons/Resume Button").GetComponent<Button>();
         Button restartButton = pausePanel.Find("Buttons/Restart Button").GetComponent<Button>();
 
         BattlePauseMenuController pauseController = GetOrAddComponent<BattlePauseMenuController>(menuControllerObject);
         SerializedObject pauseControllerObject = new SerializedObject(pauseController);
         pauseControllerObject.FindProperty("pauseUiRoot").objectReferenceValue = pausePanel.gameObject;
-        pauseControllerObject.FindProperty("navigationRoot").objectReferenceValue = pausePanel.Find("Buttons");
+        pauseControllerObject.FindProperty("navigationRoot").objectReferenceValue = pauseButtonRoot;
         pauseControllerObject.FindProperty("initialSelection").objectReferenceValue = resumeButton;
 
         ControllerUINavigationController navigationController = GetOrAddComponent<ControllerUINavigationController>(canvas.gameObject);
@@ -149,14 +191,27 @@ public static class SceneSetupUtility
         pauseControllerObject.FindProperty("hidePauseUiRootWhenClosed").boolValue = true;
         pauseControllerObject.ApplyModifiedPropertiesWithoutUndo();
 
+        PersonSelectionMenuController selectionMenuController = GetOrAddComponent<PersonSelectionMenuController>(menuControllerObject);
+        SerializedObject selectionMenuControllerObject = new SerializedObject(selectionMenuController);
+        selectionMenuControllerObject.FindProperty("menuRoot").objectReferenceValue = selectionPanel.gameObject;
+        selectionMenuControllerObject.FindProperty("cardContainer").objectReferenceValue = selectionCardList;
+        selectionMenuControllerObject.FindProperty("cardTemplate").objectReferenceValue = selectionPanel.Find("Frame/Card List/Person Card Template").GetComponent<PersonSelectionCardUI>();
+        selectionMenuControllerObject.FindProperty("emptyStateLabel").objectReferenceValue = selectionPanel.Find("Frame/Empty State").GetComponent<TextMeshProUGUI>();
+        selectionMenuControllerObject.FindProperty("peopleRoot").objectReferenceValue = GetOrCreatePeopleHolder();
+        selectionMenuControllerObject.FindProperty("navigationController").objectReferenceValue = navigationController;
+        selectionMenuControllerObject.FindProperty("showMenuOnStart").boolValue = true;
+        selectionMenuControllerObject.FindProperty("refreshCardsOnShow").boolValue = true;
+        selectionMenuControllerObject.ApplyModifiedPropertiesWithoutUndo();
+
         resumeButton.onClick.RemoveAllListeners();
         UnityEventTools.AddPersistentListener(resumeButton.onClick, pauseController.ClosePauseMenu);
         restartButton.onClick.RemoveAllListeners();
         UnityEventTools.AddPersistentListener(restartButton.onClick, menuController.RestartCurrentScene);
 
-        ConfigureSelectableNavigation(pausePanel.Find("Buttons") as RectTransform);
-        ConfigureSelectionFrame(selectionFrame, canvas, pausePanel.Find("Buttons"));
-        ConfigureNavigationController(navigationController, resumeButton, pausePanel.Find("Buttons"));
+        ConfigureSelectableNavigation(pauseButtonRoot as RectTransform);
+        ConfigureSelectableNavigation(selectionCardList as RectTransform);
+        ConfigureGameplaySelectionFrame(selectionFrame, canvas, pauseButtonRoot);
+        ConfigureNavigationController(navigationController, resumeButton, pauseButtonRoot, selectionCardList);
 
         pausePanel.gameObject.SetActive(false);
         eventSystem.SetSelectedGameObject(null);
@@ -164,66 +219,165 @@ public static class SceneSetupUtility
         EditorSceneManager.SaveScene(scene);
     }
 
+    private static void SetupResultScenes()
+    {
+        SetupResultScene(WinScenePath, "You Win", "The date survived the night.");
+        SetupResultScene(LoseScenePath, "You Lose", "The night ends here.");
+    }
+
+    private static void SetupResultScene(string scenePath, string title, string subtitle)
+    {
+        Scene scene = OpenOrCreateScene(scenePath);
+        RemoveRootObjectIfPresent("Home Canvas");
+        RemoveRootObjectIfPresent("Gameplay Canvas");
+
+        EnsureMainCamera();
+        EventSystem eventSystem = EnsureEventSystem();
+        ConfigureEventSystem(eventSystem);
+        Canvas canvas = GetOrCreateCanvas("Result Canvas", 0);
+        RectTransform canvasRect = canvas.GetComponent<RectTransform>();
+        ClearChildren(canvasRect);
+
+        CreateFullscreenImage("Background", canvasRect, new Color(0.1f, 0.12f, 0.17f, 1f));
+
+        RectTransform contentRoot = CreateUIObject("Content", canvasRect).GetComponent<RectTransform>();
+        contentRoot.anchorMin = new Vector2(0.5f, 0.5f);
+        contentRoot.anchorMax = new Vector2(0.5f, 0.5f);
+        contentRoot.pivot = new Vector2(0.5f, 0.5f);
+        contentRoot.sizeDelta = new Vector2(720f, 540f);
+        contentRoot.anchoredPosition = Vector2.zero;
+
+        VerticalLayoutGroup layout = contentRoot.gameObject.AddComponent<VerticalLayoutGroup>();
+        layout.childAlignment = TextAnchor.MiddleCenter;
+        layout.spacing = 18f;
+        layout.childControlWidth = true;
+        layout.childControlHeight = false;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+        layout.padding = new RectOffset(48, 48, 48, 48);
+
+        AddLayoutSpace(contentRoot, 24f);
+        CreateText("Title", contentRoot, title, 58, FontStyles.Bold, TextAlignmentOptions.Center, Color.white, 80f);
+        CreateText("Subtitle", contentRoot, subtitle, 24, FontStyles.Normal, TextAlignmentOptions.Center, new Color(0.78f, 0.82f, 0.9f, 1f), 36f);
+        AddLayoutSpace(contentRoot, 14f);
+
+        GameObject controllerObject = GetOrCreateRootObject("ResultMenuController");
+        MainMenuController menuController = GetOrAddComponent<MainMenuController>(controllerObject);
+
+        Button restartButton = CreateButton("Restart", contentRoot, new Color(0.82f, 0.49f, 0.19f, 1f));
+        Button mainMenuButton = CreateButton("Main Menu", contentRoot, new Color(0.25f, 0.54f, 0.73f, 1f));
+        Button quitButton = CreateButton("Quit", contentRoot, new Color(0.29f, 0.33f, 0.39f, 1f));
+
+        restartButton.onClick.RemoveAllListeners();
+        mainMenuButton.onClick.RemoveAllListeners();
+        quitButton.onClick.RemoveAllListeners();
+        UnityEventTools.AddPersistentListener(restartButton.onClick, menuController.LoadGameScene);
+        UnityEventTools.AddPersistentListener(mainMenuButton.onClick, menuController.LoadHomeScene);
+        UnityEventTools.AddPersistentListener(quitButton.onClick, menuController.QuitGame);
+
+        ControllerUINavigationController navigationController = GetOrAddComponent<ControllerUINavigationController>(canvas.gameObject);
+        ConfigureSelectableNavigation(contentRoot);
+
+        UICanvasSelectionFrame selectionFrame = EnsureSelectionFrame(canvas.transform, canvas);
+        ConfigureMenuSelectionFrame(selectionFrame, canvas, contentRoot);
+        ConfigureNavigationController(navigationController, restartButton, contentRoot);
+
+        eventSystem.SetSelectedGameObject(restartButton.gameObject);
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+    }
+
     private static void SetupFungusTestScene()
     {
-        // This test scene is rebuilt from MainScene on purpose so it keeps the existing
-        // controller navigation and pause setup while we layer a Fungus test flow on top.
-        var templateScene = EditorSceneManager.OpenScene(GameScenePath, OpenSceneMode.Single);
+        Scene templateScene = EditorSceneManager.OpenScene(GameScenePath, OpenSceneMode.Single);
         EditorSceneManager.SaveScene(templateScene, TestScenePath, true);
 
-        var scene = EditorSceneManager.OpenScene(TestScenePath, OpenSceneMode.Single);
+        Scene scene = EditorSceneManager.OpenScene(TestScenePath, OpenSceneMode.Single);
 
         EnsureMainCamera();
         ConfigureEventSystem(EnsureEventSystem());
         SetupFungusPrefabs();
 
-        SayDialog sayDialog = Object.FindObjectOfType<SayDialog>();
-        MenuDialog menuDialog = Object.FindObjectOfType<MenuDialog>();
-        Flowchart flowchart = Object.FindObjectOfType<Flowchart>();
+        Canvas gameplayCanvas = Object.FindObjectOfType<Canvas>();
+        if (gameplayCanvas != null && gameplayCanvas.name == "Gameplay Canvas")
+            CreateOrUpdateHudLabel(gameplayCanvas.GetComponent<RectTransform>(), "TEST Scene\nPick a profile to launch that person's Flowchart.\nEsc / Start: Pause");
 
-        if (flowchart == null)
-        {
-            GameObject flowchartObject = new GameObject("Flowchart");
-            flowchart = flowchartObject.AddComponent<Flowchart>();
-        }
-
-        BuildFungusTestFlowchart(flowchart, sayDialog, menuDialog);
+        SetupPersonSelectionDemo();
 
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
     }
 
-    private static void BuildFungusTestFlowchart(Flowchart flowchart, SayDialog sayDialog, MenuDialog menuDialog)
+    private static void SetupPersonSelectionDemo()
+    {
+        Flowchart rootFlowchart = GameObject.Find("Flowchart") != null ? GameObject.Find("Flowchart").GetComponent<Flowchart>() : null;
+        if (rootFlowchart != null)
+            ClearFlowchart(rootFlowchart);
+
+        SayDialog sayDialog = Object.FindObjectOfType<SayDialog>();
+        MenuDialog menuDialog = Object.FindObjectOfType<MenuDialog>();
+        PersonSelectionMenuController selectionMenuController = Object.FindObjectOfType<PersonSelectionMenuController>(true);
+        GameObject selectionMenuObject = selectionMenuController != null ? selectionMenuController.gameObject : null;
+        Transform peopleHolder = GetOrCreatePeopleHolder();
+
+        ClearChildren(peopleHolder);
+
+        CreateDemoPerson(peopleHolder, "Avery", 24, AssetDatabase.LoadAssetAtPath<Sprite>(DemoPortraitPathA), sayDialog, menuDialog, selectionMenuObject, new Vector2(40f, 40f));
+        CreateDemoPerson(peopleHolder, "Morgan", 29, AssetDatabase.LoadAssetAtPath<Sprite>(DemoPortraitPathB), sayDialog, menuDialog, selectionMenuObject, new Vector2(40f, 360f));
+        CreateDemoPerson(peopleHolder, "Rowan", 34, AssetDatabase.LoadAssetAtPath<Sprite>(DemoPortraitPathC), sayDialog, menuDialog, selectionMenuObject, new Vector2(40f, 680f));
+
+        if (selectionMenuController != null)
+            selectionMenuController.RefreshCards();
+    }
+
+    private static void CreateDemoPerson(Transform parent, string personName, int age, Sprite portrait, SayDialog sayDialog, MenuDialog menuDialog, GameObject selectionMenuObject, Vector2 startBlockPosition)
+    {
+        GameObject personObject = InstantiateScenePerson(parent, personName);
+        Person person = GetOrAddComponent<Person>(personObject);
+        Flowchart personFlowchart = GetOrAddComponent<Flowchart>(personObject);
+
+        SerializedObject personObjectData = new SerializedObject(person);
+        personObjectData.FindProperty("ageMin").intValue = age;
+        personObjectData.FindProperty("ageMax").intValue = age;
+        personObjectData.FindProperty("personName").stringValue = personName;
+        personObjectData.FindProperty("portrait").objectReferenceValue = portrait;
+        personObjectData.FindProperty("startBlockName").stringValue = "Start";
+        personObjectData.FindProperty("flowchart").objectReferenceValue = personFlowchart;
+        personObjectData.ApplyModifiedPropertiesWithoutUndo();
+
+        BuildDemoPersonFlowchart(personFlowchart, personName, sayDialog, menuDialog, selectionMenuObject, startBlockPosition);
+    }
+
+    private static void BuildDemoPersonFlowchart(Flowchart flowchart, string personName, SayDialog sayDialog, MenuDialog menuDialog, GameObject selectionMenuObject, Vector2 startBlockPosition)
     {
         ClearFlowchart(flowchart);
         ConfigureMenuDialog(menuDialog);
 
-        Block startBlock = CreateBlock(flowchart, "Start", new Vector2(40f, 40f));
-        GameStarted startEvent = flowchart.gameObject.AddComponent<GameStarted>();
-        startEvent.ParentBlock = startBlock;
-        startBlock._EventHandler = startEvent;
-
+        Block startBlock = CreateBlock(flowchart, "Start", startBlockPosition);
         AddSetSayDialog(startBlock, sayDialog);
         AddSetMenuDialog(startBlock, menuDialog);
-        AddSay(startBlock, "Hello. This is a test scene for validating Fungus.");
-        AddSay(startBlock, "You are about to see six options to test menu navigation with a controller.");
-
-        for (int i = 1; i <= 6; i++)
-        {
-            Block optionBlock = CreateBlock(flowchart, "Option " + i, new Vector2(420f, 40f + ((i - 1) * 150f)));
-            AddMenu(startBlock, "Option " + i, optionBlock);
-            BuildFungusTestOptionBlock(optionBlock, i, sayDialog, "StartScene");
-        }
-
+        AddSay(startBlock, "Hi, I'm " + personName + ".");
+        AddSay(startBlock, "This conversation started from the person selection menu.");
+        AddSay(startBlock, "In MainScene, each person can have their own Flowchart and their own portrait card.");
+        AddSay(startBlock, "When this short demo ends, the selector will appear again so you can try another profile.", true);
+        AddCallMethod(startBlock, selectionMenuObject, "ShowSelectionMenu");
         AddCommand<Stop>(startBlock);
     }
 
-    private static void BuildFungusTestOptionBlock(Block optionBlock, int optionIndex, SayDialog sayDialog, string returnSceneName)
+    private static GameObject InstantiateScenePerson(Transform parent, string personName)
     {
-        AddSetSayDialog(optionBlock, sayDialog);
-        AddSay(optionBlock, "You chose option " + optionIndex + ".");
-        AddSay(optionBlock, "End of test. Returning to the main menu.");
-        AddLoadScene(optionBlock, returnSceneName);
+        GameObject personObject = new GameObject("Person", typeof(Transform), typeof(Person));
+
+        personObject.name = personName;
+        personObject.transform.SetParent(parent, false);
+        personObject.transform.localPosition = Vector3.zero;
+        return personObject;
+    }
+
+    private static Transform GetOrCreatePeopleHolder()
+    {
+        GameObject peopleObject = GetOrCreateRootObject("People");
+        return peopleObject.transform;
     }
 
     private static void SetupFungusPrefabs()
@@ -232,6 +386,13 @@ public static class SceneSetupUtility
         InstantiatePrefabIfMissing(SayDialogPrefabPath, "SayDialog");
         InstantiatePrefabIfMissing(MenuDialogPrefabPath, "MenuDialog");
         ConfigureFungusUi();
+    }
+
+    private static void RemoveFungusObjects()
+    {
+        RemoveRootObjectIfPresent("Flowchart");
+        RemoveRootObjectIfPresent("SayDialog");
+        RemoveRootObjectIfPresent("MenuDialog");
     }
 
     private static void InstantiatePrefabIfMissing(string prefabPath, string rootName)
@@ -251,14 +412,39 @@ public static class SceneSetupUtility
         Undo.RegisterCreatedObjectUndo(instance, "Instantiate " + rootName);
     }
 
-    private static void SetupBuildSettings()
+    private static void SetupBuildSettings(bool includeFungusTestScene)
     {
+        if (includeFungusTestScene)
+        {
+            EditorBuildSettings.scenes = new[]
+            {
+                new EditorBuildSettingsScene(HomeScenePath, true),
+                new EditorBuildSettingsScene(GameScenePath, true),
+                new EditorBuildSettingsScene(WinScenePath, true),
+                new EditorBuildSettingsScene(LoseScenePath, true),
+                new EditorBuildSettingsScene(TestScenePath, true)
+            };
+            return;
+        }
+
         EditorBuildSettings.scenes = new[]
         {
             new EditorBuildSettingsScene(HomeScenePath, true),
             new EditorBuildSettingsScene(GameScenePath, true),
-            new EditorBuildSettingsScene(TestScenePath, true)
+            new EditorBuildSettingsScene(WinScenePath, true),
+            new EditorBuildSettingsScene(LoseScenePath, true)
         };
+    }
+
+    private static Scene OpenOrCreateScene(string scenePath)
+    {
+        SceneAsset sceneAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(scenePath);
+        if (sceneAsset != null)
+            return EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+
+        Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        EditorSceneManager.SaveScene(scene, scenePath);
+        return scene;
     }
 
     private static void EnsureMainCamera()
@@ -299,27 +485,11 @@ public static class SceneSetupUtility
         inputModule.cancelButton = "Cancel";
     }
 
-    private static GameObject InstantiateScenePrefab(string prefabPath, string rootName)
-    {
-        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
-        if (prefab == null)
-            return null;
-
-        GameObject instance = PrefabUtility.InstantiatePrefab(prefab) as GameObject;
-        if (instance == null)
-            return null;
-
-        instance.name = rootName;
-        return instance;
-    }
-
     private static Canvas GetOrCreateCanvas(string name, int sortingOrder)
     {
         GameObject canvasObject = GameObject.Find(name);
         if (canvasObject == null)
-        {
             canvasObject = new GameObject(name, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-        }
 
         Canvas canvas = GetOrAddComponent<Canvas>(canvasObject);
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -344,8 +514,13 @@ public static class SceneSetupUtility
 
     private static void CreateOrUpdateHudLabel(RectTransform canvasRect)
     {
+        CreateOrUpdateHudLabel(canvasRect, "Main Scene\nEsc / Start: Pause");
+    }
+
+    private static void CreateOrUpdateHudLabel(RectTransform canvasRect, string labelText)
+    {
         TextMeshProUGUI hudText = GetOrCreateText("HUD Label", canvasRect);
-        hudText.text = "Main Scene\nEsc / Start: Pause";
+        hudText.text = labelText;
         hudText.fontSize = 18;
         hudText.fontStyle = FontStyles.Normal;
         hudText.alignment = TextAlignmentOptions.TopLeft;
@@ -357,6 +532,110 @@ public static class SceneSetupUtility
         rect.pivot = new Vector2(0f, 1f);
         rect.sizeDelta = new Vector2(540f, 72f);
         rect.anchoredPosition = new Vector2(28f, -28f);
+    }
+
+    private static RectTransform GetOrCreatePersonSelectionPanel(RectTransform canvasRect)
+    {
+        RectTransform panel = GetOrCreateRectTransform("Person Selection Panel", canvasRect);
+        panel.anchorMin = Vector2.zero;
+        panel.anchorMax = Vector2.one;
+        panel.offsetMin = Vector2.zero;
+        panel.offsetMax = Vector2.zero;
+        panel.anchoredPosition = Vector2.zero;
+
+        Image panelImage = GetOrAddComponent<Image>(panel.gameObject);
+        panelImage.color = new Color(0.05f, 0.07f, 0.1f, 0.82f);
+        panelImage.raycastTarget = true;
+
+        ClearChildren(panel);
+
+        RectTransform frame = CreateUIObject("Frame", panel).GetComponent<RectTransform>();
+        frame.anchorMin = new Vector2(0.5f, 0.5f);
+        frame.anchorMax = new Vector2(0.5f, 0.5f);
+        frame.pivot = new Vector2(0.5f, 0.5f);
+        frame.sizeDelta = new Vector2(1440f, 780f);
+        frame.anchoredPosition = Vector2.zero;
+
+        Image frameImage = GetOrAddComponent<Image>(frame.gameObject);
+        frameImage.color = new Color(0.08f, 0.11f, 0.16f, 0.96f);
+
+        VerticalLayoutGroup layout = frame.gameObject.AddComponent<VerticalLayoutGroup>();
+        layout.childAlignment = TextAnchor.UpperCenter;
+        layout.spacing = 18f;
+        layout.childControlWidth = true;
+        layout.childControlHeight = false;
+        layout.childForceExpandWidth = false;
+        layout.childForceExpandHeight = false;
+        layout.padding = new RectOffset(40, 40, 40, 40);
+
+        CreateText("Title", frame, "Choose a Date", 48, FontStyles.Bold, TextAlignmentOptions.Center, Color.white, 72f);
+        CreateText("Subtitle", frame, "Pick a profile to start the conversation.", 24, FontStyles.Normal, TextAlignmentOptions.Center, new Color(0.78f, 0.82f, 0.9f, 1f), 36f);
+
+        TextMeshProUGUI emptyState = CreateText("Empty State", frame, "No people available yet.", 24, FontStyles.Normal, TextAlignmentOptions.Center, new Color(0.86f, 0.86f, 0.86f, 1f), 36f);
+        emptyState.gameObject.SetActive(false);
+
+        RectTransform cardList = CreateUIObject("Card List", frame).GetComponent<RectTransform>();
+        cardList.sizeDelta = new Vector2(1320f, 520f);
+
+        LayoutElement cardListLayout = cardList.gameObject.AddComponent<LayoutElement>();
+        cardListLayout.preferredHeight = 520f;
+
+        HorizontalLayoutGroup cardLayout = cardList.gameObject.AddComponent<HorizontalLayoutGroup>();
+        cardLayout.childAlignment = TextAnchor.UpperCenter;
+        cardLayout.spacing = 20f;
+        cardLayout.childControlWidth = false;
+        cardLayout.childControlHeight = false;
+        cardLayout.childForceExpandWidth = false;
+        cardLayout.childForceExpandHeight = false;
+
+        CreatePersonCardTemplate(cardList);
+        return panel;
+    }
+
+    private static void CreatePersonCardTemplate(Transform parent)
+    {
+        RectTransform card = GetOrCreateRectTransform("Person Card Template", parent);
+        card.sizeDelta = new Vector2(320f, 500f);
+
+        LayoutElement layoutElement = GetOrAddComponent<LayoutElement>(card.gameObject);
+        layoutElement.preferredWidth = 320f;
+        layoutElement.preferredHeight = 500f;
+        layoutElement.minWidth = 320f;
+        layoutElement.minHeight = 500f;
+
+        Image cardImage = GetOrAddComponent<Image>(card.gameObject);
+        cardImage.color = new Color(0.12f, 0.16f, 0.23f, 0.98f);
+        cardImage.raycastTarget = true;
+
+        ClearChildren(card);
+
+        VerticalLayoutGroup layout = card.gameObject.AddComponent<VerticalLayoutGroup>();
+        layout.childAlignment = TextAnchor.UpperCenter;
+        layout.spacing = 16f;
+        layout.childControlWidth = true;
+        layout.childControlHeight = false;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+        layout.padding = new RectOffset(20, 20, 20, 20);
+
+        RectTransform portrait = CreateUIObject("Portrait", card).GetComponent<RectTransform>();
+        portrait.sizeDelta = new Vector2(0f, 240f);
+
+        LayoutElement portraitLayout = portrait.gameObject.AddComponent<LayoutElement>();
+        portraitLayout.preferredHeight = 240f;
+
+        Image portraitImage = portrait.gameObject.AddComponent<Image>();
+        portraitImage.color = new Color(0.24f, 0.27f, 0.33f, 1f);
+        portraitImage.raycastTarget = false;
+
+        CreateText("Name", card, "Name", 30, FontStyles.Bold, TextAlignmentOptions.Center, Color.white, 42f);
+        CreateText("Age", card, "Age --", 22, FontStyles.Normal, TextAlignmentOptions.Center, new Color(0.82f, 0.86f, 0.92f, 1f), 32f);
+        AddLayoutSpace(card, 6f);
+
+        Button startButton = CreateButton("Start", card, new Color(0.82f, 0.49f, 0.19f, 1f));
+        startButton.name = "Start Button";
+
+        GetOrAddComponent<PersonSelectionCardUI>(card.gameObject);
     }
 
     private static RectTransform GetOrCreatePausePanel(RectTransform canvasRect, MainMenuController menuController)
@@ -412,7 +691,17 @@ public static class SceneSetupUtility
         return panel;
     }
 
-    private static void ConfigureSelectionFrame(UICanvasSelectionFrame selectionFrame, Canvas canvas, Transform navigationRoot)
+    private static void ConfigureMenuSelectionFrame(UICanvasSelectionFrame selectionFrame, Canvas canvas, Transform navigationRoot)
+    {
+        ConfigureSelectionFrame(selectionFrame, canvas, navigationRoot, new Vector2(1f, 1f));
+    }
+
+    private static void ConfigureGameplaySelectionFrame(UICanvasSelectionFrame selectionFrame, Canvas canvas, Transform navigationRoot)
+    {
+        ConfigureSelectionFrame(selectionFrame, canvas, navigationRoot, new Vector2(1.35f, 1f));
+    }
+
+    private static void ConfigureSelectionFrame(UICanvasSelectionFrame selectionFrame, Canvas canvas, Transform navigationRoot, Vector2 sizeMultiplier)
     {
         RectTransform frameRect = selectionFrame.transform as RectTransform;
         if (frameRect != null)
@@ -430,7 +719,7 @@ public static class SceneSetupUtility
         selectionFrameObject.FindProperty("useSceneWideFallbackNavigation").boolValue = false;
         selectionFrameObject.FindProperty("frameColor").colorValue = new Color(0.88f, 0.62f, 0.18f, 1f);
         selectionFrameObject.FindProperty("offset").vector2Value = new Vector2(0.52f, 0f);
-        selectionFrameObject.FindProperty("sizeMultiplier").vector2Value = new Vector2(1.35f, 1f);
+        selectionFrameObject.FindProperty("sizeMultiplier").vector2Value = sizeMultiplier;
         selectionFrameObject.FindProperty("padding").vector2Value = new Vector2(15.8f, 14.5f);
         selectionFrameObject.FindProperty("clampSizeToRoot").boolValue = true;
         selectionFrameObject.FindProperty("clampRootPadding").vector2Value = new Vector2(-14.16f, 4f);
@@ -443,13 +732,46 @@ public static class SceneSetupUtility
         selectionFrameObject.ApplyModifiedPropertiesWithoutUndo();
     }
 
-    private static void ConfigureNavigationController(ControllerUINavigationController navigationController, Selectable initialSelection, Transform navigationRoot)
+    private static void ConfigureNavigationController(ControllerUINavigationController navigationController, Selectable initialSelection, Transform navigationRoot, params Transform[] additionalPanelRoots)
     {
         SerializedObject navigationObject = new SerializedObject(navigationController);
         navigationObject.FindProperty("initialSelection").objectReferenceValue = initialSelection;
         navigationObject.FindProperty("navigationRoot").objectReferenceValue = navigationRoot;
         navigationObject.FindProperty("selectFirstOnEnable").boolValue = true;
         navigationObject.FindProperty("keepSelectionAlive").boolValue = true;
+
+        int panelTargetCount = 0;
+        if (navigationRoot != null)
+            panelTargetCount++;
+
+        for (int i = 0; i < additionalPanelRoots.Length; i++)
+        {
+            if (additionalPanelRoots[i] != null)
+                panelTargetCount++;
+        }
+
+        SerializedProperty panelTargetsProperty = navigationObject.FindProperty("panelNavigationTargets");
+        panelTargetsProperty.arraySize = panelTargetCount;
+
+        int targetIndex = 0;
+        if (navigationRoot != null)
+        {
+            SerializedProperty targetProperty = panelTargetsProperty.GetArrayElementAtIndex(targetIndex++);
+            targetProperty.FindPropertyRelative("panelRoot").objectReferenceValue = navigationRoot;
+            targetProperty.FindPropertyRelative("initialSelection").objectReferenceValue = initialSelection;
+        }
+
+        for (int i = 0; i < additionalPanelRoots.Length; i++)
+        {
+            Transform panelRoot = additionalPanelRoots[i];
+            if (panelRoot == null)
+                continue;
+
+            SerializedProperty targetProperty = panelTargetsProperty.GetArrayElementAtIndex(targetIndex++);
+            targetProperty.FindPropertyRelative("panelRoot").objectReferenceValue = panelRoot;
+            targetProperty.FindPropertyRelative("initialSelection").objectReferenceValue = null;
+        }
+
         navigationObject.ApplyModifiedPropertiesWithoutUndo();
     }
 
@@ -711,13 +1033,26 @@ public static class SceneSetupUtility
         }
     }
 
-    private static void AddSay(Block block, string text)
+    private static void AddSay(Block block, string text, bool fadeWhenDone = false)
     {
         Say command = AddCommand<Say>(block);
         SerializedObject commandObject = new SerializedObject(command);
         commandObject.FindProperty("storyText").stringValue = text;
         commandObject.FindProperty("waitForClick").boolValue = true;
-        commandObject.FindProperty("fadeWhenDone").boolValue = false;
+        commandObject.FindProperty("fadeWhenDone").boolValue = fadeWhenDone;
+        commandObject.ApplyModifiedPropertiesWithoutUndo();
+    }
+
+    private static void AddCallMethod(Block block, GameObject targetObject, string methodName)
+    {
+        if (targetObject == null || string.IsNullOrWhiteSpace(methodName))
+            return;
+
+        CallMethod command = AddCommand<CallMethod>(block);
+        SerializedObject commandObject = new SerializedObject(command);
+        commandObject.FindProperty("targetObject").objectReferenceValue = targetObject;
+        commandObject.FindProperty("methodName").stringValue = methodName;
+        commandObject.FindProperty("delay").floatValue = 0f;
         commandObject.ApplyModifiedPropertiesWithoutUndo();
     }
 
@@ -780,5 +1115,12 @@ public static class SceneSetupUtility
             component = gameObject.AddComponent<T>();
 
         return component;
+    }
+
+    private static void RemoveRootObjectIfPresent(string rootName)
+    {
+        GameObject existing = GameObject.Find(rootName);
+        if (existing != null)
+            Object.DestroyImmediate(existing);
     }
 }

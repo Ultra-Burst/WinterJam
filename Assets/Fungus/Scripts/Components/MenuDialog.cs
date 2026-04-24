@@ -232,6 +232,9 @@ namespace Fungus
             var block = targetBlock;
             UnityEngine.Events.UnityAction action = delegate
             {
+                // Project-specific guard: stop the menu submit press from also advancing
+                // the next Fungus Say command on the same frame after the menu closes.
+                DialogueAdvanceInputBlocker.BlockForSeconds(0.2f);
                 EventSystem.current.SetSelectedGameObject(null);
                 StopAllCoroutines();
                 // Stop timeout
@@ -267,6 +270,9 @@ namespace Fungus
             Closure call = callBack;
             UnityEngine.Events.UnityAction action = delegate
             {
+                // Project-specific guard: stop the menu submit press from also advancing
+                // the next Fungus Say command on the same frame after the menu closes.
+                DialogueAdvanceInputBlocker.BlockForSeconds(0.2f);
                 StopAllCoroutines();
                 // Stop timeout
                 Clear();

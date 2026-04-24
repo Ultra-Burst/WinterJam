@@ -181,6 +181,9 @@ public class BattlePauseMenuController : MonoBehaviour
             inputBlockedUntilUnscaledTime = instant
                 ? 0f
                 : Time.unscaledTime + inputBlockDurationAfterPauseClose;
+
+            if (!instant)
+                DialogueAdvanceInputBlocker.BlockForSeconds(inputBlockDurationAfterPauseClose);
         }
 
         if (pauseUiRoot != null && hidePauseUiRootWhenClosed)

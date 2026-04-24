@@ -8,17 +8,88 @@ public class Person : MonoBehaviour
     public int ageMin;
     public int ageMax;
     public string personName;
-    PersonStats Stats;
+    [SerializeField] private Sprite portrait;
+    [SerializeField] private string startBlockName = "Start";
+
+    private PersonStats stats;
     public Profile MyProfile;
     private Personality MyPersonality;
     public Flowchart flowchart;
 
+    public PersonStats Stats
+    {
+        get
+        {
+            EnsureStatsInitialized();
+            return stats;
+        }
+    }
+
+    public string DisplayName
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(Stats.Name))
+                return Stats.Name;
+
+            if (!string.IsNullOrWhiteSpace(personName))
+                return personName;
+
+            return gameObject.name;
+        }
+    }
+
+    public int DisplayAge => Stats.Age;
+    public Sprite Portrait => portrait;
+
     private void Awake()
     {
-        Stats = new PersonStats(ageMin, ageMax, personName);
+        EnsureStatsInitialized();
+        ApplyStatsToFlowchart();
     }
+
     private void Start()
     {
+        // The selection UI needs stable profile data before the player starts a conversation,
+        // so the generated stats are cached and reapplied whenever a flowchart is launched.
+        ApplyStatsToFlowchart();
+    }
+
+    public void StartConversation()
+    {
+        EnsureStatsInitialized();
+        ApplyStatsToFlowchart();
+
+        if (flowchart == null)
+        {
+            Debug.LogWarning($"{name} cannot start a conversation because no Flowchart is assigned.", this);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(startBlockName) && flowchart.ExecuteIfHasBlock(startBlockName))
+            return;
+
+        if (!flowchart.ExecuteIfHasBlock("Start"))
+        {
+            Debug.LogWarning($"{name} could not find a conversation block named '{startBlockName}' or 'Start'.", this);
+        }
+    }
+
+    private void EnsureStatsInitialized()
+    {
+        if (stats != null)
+            return;
+
+        stats = new PersonStats(ageMin, ageMax, personName);
+    }
+
+    private void ApplyStatsToFlowchart()
+    {
+        if (flowchart == null)
+            return;
+
+        EnsureStatsInitialized();
+
         // create on some ui object
         //MyProfile.CreateProfile(false, Stats);
         flowchart.SetStringVariable("Name", Stats.Name);
@@ -37,6 +108,4 @@ public class Person : MonoBehaviour
         flowchart.SetStringVariable("LivingWith", Stats.LivingWith.ToString());
         flowchart.SetIntegerVariable("Group", Random.Range(1, 4));
     }
-
-
 }

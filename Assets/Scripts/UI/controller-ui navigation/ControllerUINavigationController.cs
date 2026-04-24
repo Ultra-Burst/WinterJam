@@ -101,6 +101,11 @@ public class ControllerUINavigationController : MonoBehaviour
         Select(GetFirstAvailableSelectable());
     }
 
+    public Transform GetCurrentNavigationRoot()
+    {
+        return GetActiveNavigationRoot();
+    }
+
     public void RefreshNavigation()
     {
         if (!autoConfigureNavigation)
