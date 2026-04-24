@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Fungus;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -16,6 +17,8 @@ public class MainMenuController : MonoBehaviour
 
     public void LoadGameScene()
     {
+        Time.timeScale = 1f;
+        DialogueAdvanceInputBlocker.Clear();
         SceneManager.LoadScene(gameSceneName);
     }
 
@@ -27,6 +30,7 @@ public class MainMenuController : MonoBehaviour
     public void RestartCurrentScene()
     {
         Time.timeScale = 1f;
+        DialogueAdvanceInputBlocker.Clear();
         Scene activeScene = SceneManager.GetActiveScene();
         if (activeScene.IsValid() && !string.IsNullOrEmpty(activeScene.name))
             SceneManager.LoadScene(activeScene.name);

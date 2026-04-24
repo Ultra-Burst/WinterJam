@@ -1,15 +1,37 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using Fungus;
 
 public class UICanvasSelectionFrame : MonoBehaviour
 {
+    [System.Serializable]
+    private class ContextStyleSettings
+    {
+        public bool useOverrides = true;
+        public Vector2 offset = Vector2.zero;
+        public Vector2 sizeMultiplier = Vector2.one;
+        public Vector2 padding = new Vector2(18f, 14f);
+        public bool clampSizeToRoot = true;
+        public Vector2 clampRootPadding = new Vector2(4f, 4f);
+        public float cornerLength = 36f;
+        public float cornerThickness = 7f;
+        public bool keepOnTop = true;
+        public bool hideWhenNoSelection = true;
+        public bool snapInstantly = false;
+        public float followSpeed = 18f;
+    }
+
     [Header("References")]
     [SerializeField] private RectTransform frameRoot;
     [SerializeField] private Canvas targetCanvas;
     [SerializeField] private Transform navigationRoot;
+    [SerializeField] private ControllerUINavigationController navigationController;
     [SerializeField] private RectTransform sizeClampRoot;
     [SerializeField] private bool useSceneWideFallbackNavigation = true;
+    [SerializeField] private Transform pauseContextRoot;
+    [SerializeField] private Transform fungusContextRoot;
+    [SerializeField] private Transform chooseDateContextRoot;
 
     [Header("Look")]
     [SerializeField] private Color frameColor = new Color(0.88f, 0.62f, 0.18f, 1f);
@@ -27,6 +49,53 @@ public class UICanvasSelectionFrame : MonoBehaviour
     [SerializeField] private bool snapInstantly = false;
     [SerializeField] private float followSpeed = 18f;
 
+    [Header("Context Styles")]
+    [SerializeField] private ContextStyleSettings pauseStyle = new ContextStyleSettings
+    {
+        useOverrides = true,
+        offset = new Vector2(0.52f, 0f),
+        sizeMultiplier = new Vector2(1.35f, 1f),
+        padding = new Vector2(15.8f, 14.5f),
+        clampSizeToRoot = true,
+        clampRootPadding = new Vector2(-14.16f, 4f),
+        cornerLength = 36f,
+        cornerThickness = 7f,
+        keepOnTop = true,
+        hideWhenNoSelection = true,
+        snapInstantly = false,
+        followSpeed = 18f
+    };
+    [SerializeField] private ContextStyleSettings fungusStyle = new ContextStyleSettings
+    {
+        useOverrides = true,
+        offset = new Vector2(1f, 0f),
+        sizeMultiplier = new Vector2(1.38f, 0.88f),
+        padding = new Vector2(15.34f, 17.7f),
+        clampSizeToRoot = true,
+        clampRootPadding = new Vector2(-416.4f, 4f),
+        cornerLength = 32f,
+        cornerThickness = 7.14f,
+        keepOnTop = true,
+        hideWhenNoSelection = true,
+        snapInstantly = false,
+        followSpeed = 18f
+    };
+    [SerializeField] private ContextStyleSettings chooseDateStyle = new ContextStyleSettings
+    {
+        useOverrides = true,
+        offset = new Vector2(0.52f, 0f),
+        sizeMultiplier = new Vector2(1.28f, 1f),
+        padding = new Vector2(20f, 18f),
+        clampSizeToRoot = true,
+        clampRootPadding = new Vector2(12f, 12f),
+        cornerLength = 36f,
+        cornerThickness = 7f,
+        keepOnTop = true,
+        hideWhenNoSelection = true,
+        snapInstantly = false,
+        followSpeed = 18f
+    };
+
     private readonly Vector3[] selectedWorldCorners = new Vector3[4];
     private RectTransform parentRect;
     private Image[] cornerBars;
@@ -38,6 +107,11 @@ public class UICanvasSelectionFrame : MonoBehaviour
 
         if (targetCanvas == null)
             targetCanvas = GetComponentInParent<Canvas>();
+
+        if (navigationController == null)
+            navigationController = FindObjectOfType<ControllerUINavigationController>(true);
+
+        AutoAssignContextRoots();
 
         parentRect = frameRoot != null && frameRoot.parent != null
             ? frameRoot.parent as RectTransform
@@ -64,22 +138,24 @@ public class UICanvasSelectionFrame : MonoBehaviour
         }
 
         GameObject selectedObject = EventSystem.current.currentSelectedGameObject;
-        if (!TryGetSelectedRect(selectedObject, out RectTransform selectedRect))
+        ContextStyleSettings activeStyle = GetActiveStyle(selectedObject);
+        Transform activeContextRoot = GetActiveContextRoot(selectedObject);
+        if (!TryGetSelectedRect(selectedObject, activeContextRoot, out RectTransform selectedRect))
         {
             SetFrameVisible(false);
             return;
         }
 
-        MoveToSelectedRect(selectedRect);
-        ApplyCornerStyle();
+        MoveToSelectedRect(selectedRect, activeStyle, activeContextRoot as RectTransform);
+        ApplyCornerStyle(activeStyle);
 
-        if (keepOnTop)
+        if (activeStyle.keepOnTop)
             frameRoot.SetAsLastSibling();
 
         SetFrameVisible(true);
     }
 
-    private bool TryGetSelectedRect(GameObject selectedObject, out RectTransform selectedRect)
+    private bool TryGetSelectedRect(GameObject selectedObject, Transform activeContextRoot, out RectTransform selectedRect)
     {
         selectedRect = null;
 
@@ -91,6 +167,16 @@ public class UICanvasSelectionFrame : MonoBehaviour
             : targetCanvas != null
                 ? targetCanvas.transform
                 : null;
+
+        if (activeContextRoot != null)
+            effectiveNavigationRoot = activeContextRoot;
+
+        if (navigationController != null)
+        {
+            Transform controllerRoot = navigationController.GetCurrentNavigationRoot();
+            if (controllerRoot != null)
+                effectiveNavigationRoot = controllerRoot;
+        }
 
         if (!useSceneWideFallbackNavigation &&
             effectiveNavigationRoot != null &&
@@ -105,7 +191,7 @@ public class UICanvasSelectionFrame : MonoBehaviour
         return selectedRect != null;
     }
 
-    private void MoveToSelectedRect(RectTransform selectedRect)
+    private void MoveToSelectedRect(RectTransform selectedRect, ContextStyleSettings activeStyle, RectTransform activeClampRoot)
     {
         selectedRect.GetWorldCorners(selectedWorldCorners);
 
@@ -116,41 +202,43 @@ public class UICanvasSelectionFrame : MonoBehaviour
         RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, bottomLeftScreen, canvasCamera, out Vector2 localBottomLeft);
         RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, topRightScreen, canvasCamera, out Vector2 localTopRight);
 
-        Vector2 targetPosition = (localBottomLeft + localTopRight) * 0.5f + offset;
+        Vector2 targetPosition = (localBottomLeft + localTopRight) * 0.5f + activeStyle.offset;
         Vector2 targetSize = new Vector2(
-            Mathf.Abs(localTopRight.x - localBottomLeft.x) + padding.x * 2f,
-            Mathf.Abs(localTopRight.y - localBottomLeft.y) + padding.y * 2f);
-        targetSize = new Vector2(targetSize.x * sizeMultiplier.x, targetSize.y * sizeMultiplier.y);
-        targetSize = ClampTargetSizeToRoot(targetSize);
+            Mathf.Abs(localTopRight.x - localBottomLeft.x) + activeStyle.padding.x * 2f,
+            Mathf.Abs(localTopRight.y - localBottomLeft.y) + activeStyle.padding.y * 2f);
+        targetSize = new Vector2(targetSize.x * activeStyle.sizeMultiplier.x, targetSize.y * activeStyle.sizeMultiplier.y);
+        targetSize = ClampTargetSizeToRoot(targetSize, activeStyle, activeClampRoot);
 
-        if (snapInstantly)
+        if (activeStyle.snapInstantly)
         {
             frameRoot.anchoredPosition = targetPosition;
         }
         else
         {
-            float t = 1f - Mathf.Exp(-followSpeed * Time.unscaledDeltaTime);
+            float t = 1f - Mathf.Exp(-activeStyle.followSpeed * Time.unscaledDeltaTime);
             frameRoot.anchoredPosition = Vector2.Lerp(frameRoot.anchoredPosition, targetPosition, t);
         }
 
         frameRoot.sizeDelta = targetSize;
     }
 
-    private Vector2 ClampTargetSizeToRoot(Vector2 targetSize)
+    private Vector2 ClampTargetSizeToRoot(Vector2 targetSize, ContextStyleSettings activeStyle, RectTransform activeClampRoot)
     {
-        if (!clampSizeToRoot)
+        if (!activeStyle.clampSizeToRoot)
             return targetSize;
 
         RectTransform clampRoot = sizeClampRoot != null
             ? sizeClampRoot
-            : navigationRoot as RectTransform;
+            : activeClampRoot != null
+                ? activeClampRoot
+                : navigationRoot as RectTransform;
 
         if (clampRoot == null)
             return targetSize;
 
         Vector2 maxSize = new Vector2(
-            Mathf.Max(1f, clampRoot.rect.width - clampRootPadding.x * 2f),
-            Mathf.Max(1f, clampRoot.rect.height - clampRootPadding.y * 2f));
+            Mathf.Max(1f, clampRoot.rect.width - activeStyle.clampRootPadding.x * 2f),
+            Mathf.Max(1f, clampRoot.rect.height - activeStyle.clampRootPadding.y * 2f));
 
         return new Vector2(
             Mathf.Min(targetSize.x, maxSize.x),
@@ -195,7 +283,7 @@ public class UICanvasSelectionFrame : MonoBehaviour
         CreateCornerBar(6, "BottomRight_H", new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f));
         CreateCornerBar(7, "BottomRight_V", new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f));
 
-        ApplyCornerStyle();
+        ApplyCornerStyle(GetActiveStyle(null));
     }
 
     private void CreateCornerBar(int index, string childName, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot)
@@ -218,7 +306,7 @@ public class UICanvasSelectionFrame : MonoBehaviour
         cornerBars[index] = image;
     }
 
-    private void ApplyCornerStyle()
+    private void ApplyCornerStyle(ContextStyleSettings activeStyle)
     {
         if (cornerBars == null || cornerBars.Length != 8)
             return;
@@ -229,14 +317,14 @@ public class UICanvasSelectionFrame : MonoBehaviour
                 cornerBars[i].color = frameColor;
         }
 
-        SetBar(cornerBars[0], new Vector2(cornerLength, cornerThickness));
-        SetBar(cornerBars[1], new Vector2(cornerThickness, cornerLength));
-        SetBar(cornerBars[2], new Vector2(cornerLength, cornerThickness));
-        SetBar(cornerBars[3], new Vector2(cornerThickness, cornerLength));
-        SetBar(cornerBars[4], new Vector2(cornerLength, cornerThickness));
-        SetBar(cornerBars[5], new Vector2(cornerThickness, cornerLength));
-        SetBar(cornerBars[6], new Vector2(cornerLength, cornerThickness));
-        SetBar(cornerBars[7], new Vector2(cornerThickness, cornerLength));
+        SetBar(cornerBars[0], new Vector2(activeStyle.cornerLength, activeStyle.cornerThickness));
+        SetBar(cornerBars[1], new Vector2(activeStyle.cornerThickness, activeStyle.cornerLength));
+        SetBar(cornerBars[2], new Vector2(activeStyle.cornerLength, activeStyle.cornerThickness));
+        SetBar(cornerBars[3], new Vector2(activeStyle.cornerThickness, activeStyle.cornerLength));
+        SetBar(cornerBars[4], new Vector2(activeStyle.cornerLength, activeStyle.cornerThickness));
+        SetBar(cornerBars[5], new Vector2(activeStyle.cornerThickness, activeStyle.cornerLength));
+        SetBar(cornerBars[6], new Vector2(activeStyle.cornerLength, activeStyle.cornerThickness));
+        SetBar(cornerBars[7], new Vector2(activeStyle.cornerThickness, activeStyle.cornerLength));
     }
 
     private void SetBar(Image image, Vector2 size)
@@ -259,7 +347,7 @@ public class UICanvasSelectionFrame : MonoBehaviour
 
     private void SetFrameVisible(bool visible)
     {
-        if (!hideWhenNoSelection || cornerBars == null)
+        if (cornerBars == null)
             return;
 
         for (int i = 0; i < cornerBars.Length; i++)
@@ -267,5 +355,111 @@ public class UICanvasSelectionFrame : MonoBehaviour
             if (cornerBars[i] != null && cornerBars[i].enabled != visible)
                 cornerBars[i].enabled = visible;
         }
+    }
+
+    private void AutoAssignContextRoots()
+    {
+        if (pauseContextRoot == null)
+        {
+            GameObject pauseObject = FindChildGameObjectByName(transform.root, "Pause Panel");
+            if (pauseObject != null)
+                pauseContextRoot = pauseObject.transform;
+        }
+
+        if (chooseDateContextRoot == null)
+        {
+            GameObject chooseDateObject = FindChildGameObjectByName(transform.root, "Person Selection Panel");
+            if (chooseDateObject != null)
+                chooseDateContextRoot = chooseDateObject.transform;
+        }
+
+        if (fungusContextRoot == null && MenuDialog.ActiveMenuDialog != null)
+            fungusContextRoot = MenuDialog.ActiveMenuDialog.transform;
+    }
+
+    private ContextStyleSettings GetActiveStyle(GameObject selectedObject)
+    {
+        AutoAssignContextRoots();
+
+        if (IsInContext(selectedObject, chooseDateContextRoot) && chooseDateStyle != null && chooseDateStyle.useOverrides)
+            return chooseDateStyle;
+
+        Transform resolvedFungusRoot = GetResolvedFungusContextRoot();
+        if (IsInContext(selectedObject, resolvedFungusRoot) && fungusStyle != null && fungusStyle.useOverrides)
+            return fungusStyle;
+
+        if (IsInContext(selectedObject, pauseContextRoot) && pauseStyle != null && pauseStyle.useOverrides)
+            return pauseStyle;
+
+        return BuildFallbackStyle();
+    }
+
+    private Transform GetActiveContextRoot(GameObject selectedObject)
+    {
+        AutoAssignContextRoots();
+
+        if (IsInContext(selectedObject, chooseDateContextRoot))
+            return chooseDateContextRoot;
+
+        Transform resolvedFungusRoot = GetResolvedFungusContextRoot();
+        if (IsInContext(selectedObject, resolvedFungusRoot))
+            return resolvedFungusRoot;
+
+        if (IsInContext(selectedObject, pauseContextRoot))
+            return pauseContextRoot;
+
+        return navigationController != null ? navigationController.GetCurrentNavigationRoot() : navigationRoot;
+    }
+
+    private Transform GetResolvedFungusContextRoot()
+    {
+        if (fungusContextRoot != null)
+            return fungusContextRoot;
+
+        if (MenuDialog.ActiveMenuDialog != null)
+            fungusContextRoot = MenuDialog.ActiveMenuDialog.transform;
+
+        return fungusContextRoot;
+    }
+
+    private bool IsInContext(GameObject selectedObject, Transform contextRoot)
+    {
+        return selectedObject != null &&
+               contextRoot != null &&
+               selectedObject.transform.IsChildOf(contextRoot);
+    }
+
+    private ContextStyleSettings BuildFallbackStyle()
+    {
+        return new ContextStyleSettings
+        {
+            useOverrides = true,
+            offset = offset,
+            sizeMultiplier = sizeMultiplier,
+            padding = padding,
+            clampSizeToRoot = clampSizeToRoot,
+            clampRootPadding = clampRootPadding,
+            cornerLength = cornerLength,
+            cornerThickness = cornerThickness,
+            keepOnTop = keepOnTop,
+            hideWhenNoSelection = hideWhenNoSelection,
+            snapInstantly = snapInstantly,
+            followSpeed = followSpeed
+        };
+    }
+
+    private GameObject FindChildGameObjectByName(Transform root, string childName)
+    {
+        if (root == null || string.IsNullOrWhiteSpace(childName))
+            return null;
+
+        Transform[] children = root.GetComponentsInChildren<Transform>(true);
+        for (int i = 0; i < children.Length; i++)
+        {
+            if (children[i] != null && children[i].name == childName)
+                return children[i].gameObject;
+        }
+
+        return null;
     }
 }

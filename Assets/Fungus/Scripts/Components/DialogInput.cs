@@ -79,6 +79,15 @@ namespace Fungus
                 return;
             }
 
+            // Project-specific guard: block recycled submit input for a short time
+            // after UI menus close so the same press can't skip the next Fungus line.
+            if (DialogueAdvanceInputBlocker.IsBlocked)
+            {
+                dialogClickedFlag = false;
+                nextLineInputFlag = false;
+                return;
+            }
+
             if (currentStandaloneInputModule == null)
             {
                 currentStandaloneInputModule = EventSystem.current.GetComponent<StandaloneInputModule>();
