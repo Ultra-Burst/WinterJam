@@ -182,6 +182,7 @@ public class PersonSelectionMenuController : MonoBehaviour
         if (person == null || completedPeople.Contains(person))
             return;
 
+        int remainingMatchesAfterThisDate = Mathf.Max(0, GetAvailablePeopleCount() - 1);
         currentConversationPerson = person;
         activeConversationFlowchart = person.flowchart;
         activeConversationStartFrame = Time.frameCount;
@@ -189,8 +190,9 @@ public class PersonSelectionMenuController : MonoBehaviour
         activeConversationInactiveSince = -1f;
         pendingConversationFinishedByFungus = false;
         pendingConversationFinishedAt = -1f;
+        ResetMenuDialogState();
         HideSelectionMenu();
-        person.StartConversation();
+        person.StartConversation(remainingMatchesAfterThisDate);
     }
 
     public void ResetSelectionProgress()
@@ -392,6 +394,7 @@ public class PersonSelectionMenuController : MonoBehaviour
             return;
 
         finalSequenceStarted = true;
+        ResetMenuDialogState();
         HideSelectionMenu();
 
         if (lastFlowchart == null)
@@ -400,6 +403,8 @@ public class PersonSelectionMenuController : MonoBehaviour
             return;
         }
 
+        lastFlowchart.Reset(true, true);
+        lastFlowchart.SetIntegerVariable("RemainingMatches", 0);
         waitingForLastFlowchart = true;
         lastFlowchartStartFrame = Time.frameCount;
         lastFlowchartWasObserved = false;
@@ -594,6 +599,16 @@ public class PersonSelectionMenuController : MonoBehaviour
         }
 
         return false;
+    }
+
+    private static void ResetMenuDialogState()
+    {
+        MenuDialog menuDialog = MenuDialog.ActiveMenuDialog;
+        if (menuDialog == null)
+            return;
+
+        menuDialog.Clear();
+        menuDialog.SetActive(false);
     }
 
     private GameObject FindChildGameObjectByName(Transform root, string childName)

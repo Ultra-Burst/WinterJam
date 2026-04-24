@@ -57,14 +57,26 @@ public class Person : MonoBehaviour
 
     public void StartConversation()
     {
+        StartConversation(-1);
+    }
+
+    public void StartConversation(int remainingMatches)
+    {
         EnsureStatsInitialized();
-        ApplyStatsToFlowchart();
 
         if (flowchart == null)
         {
             Debug.LogWarning($"{name} cannot start a conversation because no Flowchart is assigned.", this);
             return;
         }
+
+        // Reset the flowchart before every date so visited menu options and temporary
+        // variables do not leak from a previous conversation into the next one.
+        flowchart.Reset(true, true);
+        ApplyStatsToFlowchart();
+
+        if (remainingMatches >= 0)
+            flowchart.SetIntegerVariable("RemainingMatches", remainingMatches);
 
         if (!string.IsNullOrWhiteSpace(startBlockName) && flowchart.ExecuteIfHasBlock(startBlockName))
             return;
